@@ -7,7 +7,7 @@ your One Pace video files so Jellyfin displays proper arc names,
 episode titles, and artwork.
 
 Usage:
-    python setup.py /path/to/your/One\ Pace/
+    python setup.py "/path/to/your/One Pace/"
 
 See README.md for full instructions.
 """
@@ -41,6 +41,21 @@ def load_seasons():
         return json.load(f)
 
 
+NUMBER_WORDS = {
+    "1": "one", "2": "two", "3": "three", "4": "four", "5": "five",
+    "6": "six", "7": "seven", "8": "eight", "9": "nine",
+}
+NUMBER_WORDS_INV = {v: k for k, v in NUMBER_WORDS.items()}
+
+
+def normalize(name):
+    """Lowercase and replace digit↔word numbers for fuzzy matching."""
+    n = name.lower().strip()
+    for digit, word in NUMBER_WORDS.items():
+        n = re.sub(rf"\b{digit}\b", word, n)
+    return n
+
+
 def find_season_number(arc_name, seasons):
     """Match arc name from filename to season number, with fuzzy fallback."""
     if arc_name in seasons:
@@ -49,7 +64,12 @@ def find_season_number(arc_name, seasons):
     for k, v in seasons.items():
         if k.lower() == arc_lower:
             return v
-    # Partial match (e.g. "Long Ring Long Land" vs "Long Ring Long Land ")
+    # Normalize numbers (e.g. "Water 7" → "Water Seven")
+    arc_norm = normalize(arc_name)
+    for k, v in seasons.items():
+        if normalize(k) == arc_norm:
+            return v
+    # Partial match
     for k, v in seasons.items():
         if arc_lower in k.lower() or k.lower() in arc_lower:
             return v
