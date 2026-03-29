@@ -28,10 +28,19 @@ VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".m4v"}
 #   [One Pace][218-220] Jaya 01 [1080p][2BBCD106].mkv
 #   [One Pace][302-303] Skypiea 25 Alternate (G-8) [1080p][90C45C25].mkv
 #   [One Pace][303] Long Ring Long Land 00 [1080p][En Sub][7582DAC2].mp4
+#   [One Pace][79-81] Arlong Park 05 Extended [1080p][587689A9].mkv
 FILENAME_PATTERN = re.compile(
     r"^\[One Pace\]\[[^\]]+\]\s+(.+?)\s+(\d+)"
-    r"(\s+Alternate[^\[]*?)?"
+    r"(\s+Alternate[^\[]*?|\s+Extended[^\[]*?)?"
     r"\s+\[",
+    re.IGNORECASE,
+)
+
+# Matches single-episode arcs that have no episode number:
+#   [One Pace][35-75] The Adventures of Buggy's Crew [1080p][1177A2B6].mkv
+#   [One Pace][83-119] The Trials of Koby-Meppo [1080p][4B56844F].mkv
+FILENAME_PATTERN_NO_EP = re.compile(
+    r"^\[One Pace\]\[[^\]]+\]\s+(.+?)\s+\[",
     re.IGNORECASE,
 )
 
@@ -142,12 +151,19 @@ def process(media_path, force=False):
                 continue
 
             m = FILENAME_PATTERN.match(video.name)
-            if not m:
-                unmatched.append(str(video))
-                continue
-
-            ep_num = int(m.group(2))
-            is_alternate = bool(m.group(3))
+            if m:
+                ep_num = int(m.group(2))
+                variant = m.group(3)
+                is_alternate = variant and "Alternate" in variant
+                is_extended = variant and "Extended" in variant
+            else:
+                m = FILENAME_PATTERN_NO_EP.match(video.name)
+                if not m:
+                    unmatched.append(str(video))
+                    continue
+                ep_num = 1
+                is_alternate = False
+                is_extended = False
 
             if is_alternate:
                 nfo_name = f"S{season_num:02d}E{ep_num:02d}_alternate.nfo"
@@ -162,7 +178,21 @@ def process(media_path, force=False):
                 unmatched.append(str(video))
                 continue
 
-            if place_file(nfo_src, nfo_dst, force):
+            if is_extended:
+                if nfo_dst.exists() and not force:
+                    print(f"   · {video.name}  (skipped, already exists — use --force to overwrite)")
+                    skipped += 1
+                    continue
+                nfo_content = nfo_src.read_text(encoding="utf-8")
+                nfo_content = re.sub(
+                    r"<title>(.+?)</title>",
+                    r"<title>\1 (Extended)</title>",
+                    nfo_content,
+                )
+                nfo_dst.write_text(nfo_content, encoding="utf-8")
+                print(f"   ✓ {video.name}")
+                placed += 1
+            elif place_file(nfo_src, nfo_dst, force):
                 print(f"   ✓ {video.name}")
                 placed += 1
             else:
